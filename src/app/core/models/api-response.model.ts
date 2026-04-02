@@ -1,18 +1,17 @@
 export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
+  exito: boolean;
+  mensaje: string;
+  datos: T;
+  codigoError?: string;
+  timestamp: string;
 }
 
-export interface PaginatedResponse<T> {
-  success: boolean;
-  data: T[];
-  meta: PaginationMeta;
-}
-
-export interface PaginationMeta {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  itemsPerPage: number;
+export interface PaginaResponse<T> {
+  contenido: T[];
+  pagina: number;
+  tamanio: number;
+  totalElementos: number;
+  totalPaginas: number;
+  primera: boolean;
+  ultima: boolean;
 }

@@ -1,1 +1,14 @@
 export { ThemeService } from './theme.service';
+export { BaseApiService } from './base-api.service';
+export { BodegaService } from './bodega.service';
+export { UbicacionService } from './ubicacion.service';
+export { UnidadService } from './unidad.service';
+export { ConversionUnidadService } from './conversion-unidad.service';
+export { StockService, type StockConsolidadoFiltros } from './stock.service';
+export { KardexService, type KardexFiltros } from './kardex.service';
+export { RecepcionService } from './recepcion.service';
+export { TransferenciaService } from './transferencia.service';
+export { AjusteService } from './ajuste.service';
+export { PickingService } from './picking.service';
+export { ConteoFisicoService } from './conteo-fisico.service';
+export { MovimientoService } from './movimiento.service';

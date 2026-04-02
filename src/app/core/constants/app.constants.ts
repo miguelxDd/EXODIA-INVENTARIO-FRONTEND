@@ -3,4 +3,5 @@ export const APP_CONSTANTS = {
   STORAGE_PREFIX: 'exodia',
   THEME_KEY: 'exodia-theme',
   TOKEN_KEY: 'exodia-token',
+  EMPRESA_ID_KEY: 'exodia-empresa-id',
 } as const;
