@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { Title } from '@angular/platform-browser';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AvatarModule } from 'primeng/avatar';
@@ -570,6 +571,7 @@ const SEARCH_TYPE_SEVERITY: Record<SearchableRecord['type'], 'info' | 'success' 
 export class LayoutComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly documentTitle = inject(Title);
   readonly theme = inject(ThemeService);
 
   private readonly globalSearchInput = viewChild<ElementRef<HTMLInputElement>>('globalSearchInput');
@@ -701,6 +703,10 @@ export class LayoutComponent {
       this.currentUrl();
       this.drawerVisible.set(false);
       this.searchVisible.set(false);
+    });
+
+    effect(() => {
+      this.documentTitle.setTitle(`EXODIA | ${this.currentPageLabel()}`);
     });
 
     this.themeControl.valueChanges

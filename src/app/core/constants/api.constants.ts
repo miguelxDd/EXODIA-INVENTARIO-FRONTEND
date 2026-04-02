@@ -28,6 +28,6 @@ export const API = {
   VALORIZACION: '/api/v1/valorizacion',
   CONVERSION_INVENTARIO: '/api/v1/inventario/conversiones',
   ETIQUETAS: '/api/v1/etiquetas',
-  REPORTES: '/api/v1/reportes/inventario',
-  VENTAS_AJUSTE: '/api/v1/ventas/ajuste',
+  REPORTES: '/api/v1/reportes',
+  VENTAS_AJUSTE: '/api/v1/ventas-ajustes',
 } as const;

@@ -11,11 +11,14 @@ import { PickingService } from '@core/services';
 import { OrdenPickingResponse, PaginaResponse } from '@core/models';
 
 type PickingSeverity = 'success' | 'danger' | 'info';
+type ActionFeedback = { severity: 'success' | 'error'; text: string };
 
 type PickingRow = OrdenPickingResponse & {
   estadoSeverity: PickingSeverity;
   lineCount: number;
   canExecute: boolean;
+  executeLoading: boolean;
+  executeDisabled: boolean;
 };
 
 @Component({
@@ -33,6 +36,10 @@ type PickingRow = OrdenPickingResponse & {
 
     @if (error()) {
       <p-message severity="error" [text]="error()!" />
+    }
+
+    @if (feedback()) {
+      <p-message [severity]="feedback()!.severity" [text]="feedback()!.text" />
     }
 
     <p-table
@@ -67,7 +74,17 @@ type PickingRow = OrdenPickingResponse & {
             <td>{{ p.creadoEn | date:'short' }}</td>
             <td>
               @if (p.canExecute) {
-                <p-button icon="pi pi-play" [text]="true" [rounded]="true" severity="success" pTooltip="Ejecutar" />
+                <p-button
+                  icon="pi pi-play"
+                  [text]="true"
+                  [rounded]="true"
+                  severity="success"
+                  pTooltip="Ejecutar"
+                  ariaLabel="Ejecutar orden de picking"
+                  [loading]="p.executeLoading"
+                  [disabled]="p.executeDisabled"
+                  (onClick)="executePicking(p.id)"
+                />
               }
             </td>
           </tr>
@@ -93,16 +110,24 @@ export class PickingPageComponent implements OnInit {
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
   readonly rows = computed<PickingRow[]>(() =>
-    this.datos().contenido.map(item => ({
-      ...item,
-      estadoSeverity: item.estado === 'COMPLETADO' ? 'success' : item.estado === 'CANCELADO' ? 'danger' : 'info',
-      lineCount: item.lineas?.length ?? 0,
-      canExecute: item.estado === 'PENDIENTE',
-    }))
+    this.datos().contenido.map(item => {
+      const isExecuting = this.activePickingId() === item.id;
+
+      return {
+        ...item,
+        estadoSeverity: item.estado === 'COMPLETADO' ? 'success' : item.estado === 'CANCELADO' ? 'danger' : 'info',
+        lineCount: item.lineas?.length ?? 0,
+        canExecute: item.estado === 'PENDIENTE',
+        executeLoading: isExecuting,
+        executeDisabled: this.cargando() || this.activePickingId() !== null,
+      };
+    })
   );
   readonly cargando = signal(false);
   readonly error = signal<string | null>(null);
   readonly currentPage = signal<number | null>(null);
+  readonly feedback = signal<ActionFeedback | null>(null);
+  readonly activePickingId = signal<number | null>(null);
 
   ngOnInit(): void {
     this.cargar();
@@ -124,10 +149,40 @@ export class PickingPageComponent implements OnInit {
     });
   }
 
+  executePicking(id: number): void {
+    if (this.activePickingId() !== null) {
+      return;
+    }
+
+    this.feedback.set(null);
+    this.activePickingId.set(id);
+
+    this.pickingService.ejecutar(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: picking => {
+        this.updatePicking(picking);
+        this.feedback.set({ severity: 'success', text: UI_MESSAGES.EXECUTE_PICKING_SUCCESS });
+        this.activePickingId.set(null);
+      },
+      error: () => {
+        this.feedback.set({ severity: 'error', text: UI_MESSAGES.EXECUTE_PICKING_ERROR });
+        this.activePickingId.set(null);
+      },
+    });
+  }
+
   onPageChange(event: TableLazyLoadEvent): void {
     const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
     if (this.currentPage() !== page) {
       this.cargar(page);
     }
+  }
+
+  private updatePicking(updatedPicking: OrdenPickingResponse): void {
+    this.datos.update(data => ({
+      ...data,
+      contenido: data.contenido.map(item =>
+        item.id === updatedPicking.id ? updatedPicking : item
+      ),
+    }));
   }
 }

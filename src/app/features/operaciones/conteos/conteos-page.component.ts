@@ -11,12 +11,15 @@ import { ConteoFisicoService } from '@core/services';
 import { ConteoFisicoResponse, PaginaResponse } from '@core/models';
 
 type ConteoSeverity = 'success' | 'danger' | 'info';
+type ActionFeedback = { severity: 'success' | 'error'; text: string };
 
 type ConteoRow = ConteoFisicoResponse & {
   estadoSeverity: ConteoSeverity;
   lineCount: number;
   ajusteGeneradoLabel: string;
   canApply: boolean;
+  applyLoading: boolean;
+  applyDisabled: boolean;
 };
 
 @Component({
@@ -34,6 +37,10 @@ type ConteoRow = ConteoFisicoResponse & {
 
     @if (error()) {
       <p-message severity="error" [text]="error()!" />
+    }
+
+    @if (feedback()) {
+      <p-message [severity]="feedback()!.severity" [text]="feedback()!.text" />
     }
 
     <p-table
@@ -68,7 +75,17 @@ type ConteoRow = ConteoFisicoResponse & {
             <td>{{ c.fechaConteo | date:'short' }}</td>
             <td>
               @if (c.canApply) {
-                <p-button icon="pi pi-check" [text]="true" [rounded]="true" severity="success" pTooltip="Aplicar" />
+                <p-button
+                  icon="pi pi-check"
+                  [text]="true"
+                  [rounded]="true"
+                  severity="success"
+                  pTooltip="Aplicar"
+                  ariaLabel="Aplicar conteo fisico"
+                  [loading]="c.applyLoading"
+                  [disabled]="c.applyDisabled"
+                  (onClick)="applyCount(c.id)"
+                />
               }
             </td>
           </tr>
@@ -95,17 +112,25 @@ export class ConteosPageComponent implements OnInit {
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
   readonly rows = computed<ConteoRow[]>(() =>
-    this.datos().contenido.map(item => ({
-      ...item,
-      estadoSeverity: item.estado === 'APLICADO' ? 'success' : item.estado === 'CANCELADO' ? 'danger' : 'info',
-      lineCount: item.lineas?.length ?? 0,
-      ajusteGeneradoLabel: item.ajusteGeneradoId ? `#${item.ajusteGeneradoId}` : this.emptyValue,
-      canApply: item.estado === 'EN_PROGRESO',
-    }))
+    this.datos().contenido.map(item => {
+      const isApplying = this.activeConteoId() === item.id;
+
+      return {
+        ...item,
+        estadoSeverity: item.estado === 'APLICADO' ? 'success' : item.estado === 'CANCELADO' ? 'danger' : 'info',
+        lineCount: item.lineas?.length ?? 0,
+        ajusteGeneradoLabel: item.ajusteGeneradoId ? `#${item.ajusteGeneradoId}` : this.emptyValue,
+        canApply: item.estado === 'EN_PROGRESO',
+        applyLoading: isApplying,
+        applyDisabled: this.cargando() || this.activeConteoId() !== null,
+      };
+    })
   );
   readonly cargando = signal(false);
   readonly error = signal<string | null>(null);
   readonly currentPage = signal<number | null>(null);
+  readonly feedback = signal<ActionFeedback | null>(null);
+  readonly activeConteoId = signal<number | null>(null);
 
   ngOnInit(): void {
     this.cargar();
@@ -127,10 +152,40 @@ export class ConteosPageComponent implements OnInit {
     });
   }
 
+  applyCount(id: number): void {
+    if (this.activeConteoId() !== null) {
+      return;
+    }
+
+    this.feedback.set(null);
+    this.activeConteoId.set(id);
+
+    this.conteoService.aplicar(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: conteo => {
+        this.updateConteo(conteo);
+        this.feedback.set({ severity: 'success', text: UI_MESSAGES.APPLY_CONTEO_SUCCESS });
+        this.activeConteoId.set(null);
+      },
+      error: () => {
+        this.feedback.set({ severity: 'error', text: UI_MESSAGES.APPLY_CONTEO_ERROR });
+        this.activeConteoId.set(null);
+      },
+    });
+  }
+
   onPageChange(event: TableLazyLoadEvent): void {
     const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
     if (this.currentPage() !== page) {
       this.cargar(page);
     }
+  }
+
+  private updateConteo(updatedConteo: ConteoFisicoResponse): void {
+    this.datos.update(data => ({
+      ...data,
+      contenido: data.contenido.map(item =>
+        item.id === updatedConteo.id ? updatedConteo : item
+      ),
+    }));
   }
 }

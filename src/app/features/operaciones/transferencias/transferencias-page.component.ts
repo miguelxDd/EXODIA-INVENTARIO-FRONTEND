@@ -11,12 +11,17 @@ import { TransferenciaService } from '@core/services';
 import { TransferenciaResponse, PaginaResponse } from '@core/models';
 
 type TagSeverity = 'success' | 'info' | 'warn' | 'danger' | 'secondary';
+type ActionFeedback = { severity: 'success' | 'error'; text: string };
+type TransferAction = 'confirm' | 'dispatch';
 
 type TransferenciaRow = TransferenciaResponse & {
   estadoSeverity: TagSeverity;
   lineCount: number;
   canConfirm: boolean;
   canDispatch: boolean;
+  confirmLoading: boolean;
+  dispatchLoading: boolean;
+  actionsDisabled: boolean;
 };
 
 @Component({
@@ -34,6 +39,10 @@ type TransferenciaRow = TransferenciaResponse & {
 
     @if (error()) {
       <p-message severity="error" [text]="error()!" />
+    }
+
+    @if (feedback()) {
+      <p-message [severity]="feedback()!.severity" [text]="feedback()!.text" />
     }
 
     <p-table
@@ -72,10 +81,30 @@ type TransferenciaRow = TransferenciaResponse & {
             <td>{{ t.creadoEn | date:'short' }}</td>
             <td>
               @if (t.canConfirm) {
-                <p-button icon="pi pi-check" [text]="true" [rounded]="true" severity="success" pTooltip="Confirmar" />
+                <p-button
+                  icon="pi pi-check"
+                  [text]="true"
+                  [rounded]="true"
+                  severity="success"
+                  pTooltip="Confirmar"
+                  ariaLabel="Confirmar transferencia"
+                  [loading]="t.confirmLoading"
+                  [disabled]="t.actionsDisabled"
+                  (onClick)="confirmTransfer(t.id)"
+                />
               }
               @if (t.canDispatch) {
-                <p-button icon="pi pi-send" [text]="true" [rounded]="true" severity="info" pTooltip="Despachar" />
+                <p-button
+                  icon="pi pi-send"
+                  [text]="true"
+                  [rounded]="true"
+                  severity="info"
+                  pTooltip="Despachar"
+                  ariaLabel="Despachar transferencia"
+                  [loading]="t.dispatchLoading"
+                  [disabled]="t.actionsDisabled"
+                  (onClick)="dispatchTransfer(t.id)"
+                />
               }
             </td>
           </tr>
@@ -111,17 +140,29 @@ export class TransferenciasPageComponent implements OnInit {
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
   readonly rows = computed<TransferenciaRow[]>(() =>
-    this.datos().contenido.map(item => ({
-      ...item,
-      estadoSeverity: this.estadoSeverityMap[item.estadoCodigo] ?? 'secondary',
-      lineCount: item.lineas?.length ?? 0,
-      canConfirm: item.estadoCodigo === 'BORRADOR',
-      canDispatch: item.estadoCodigo === 'CONFIRMADO',
-    }))
+    this.datos().contenido.map(item => {
+      const activeAction = this.activeAction();
+      const isConfirming = activeAction?.id === item.id && activeAction.type === 'confirm';
+      const isDispatching = activeAction?.id === item.id && activeAction.type === 'dispatch';
+      const actionsDisabled = this.cargando() || this.activeAction() !== null;
+
+      return {
+        ...item,
+        estadoSeverity: this.estadoSeverityMap[item.estadoCodigo] ?? 'secondary',
+        lineCount: item.lineas?.length ?? 0,
+        canConfirm: item.estadoCodigo === 'BORRADOR',
+        canDispatch: item.estadoCodigo === 'CONFIRMADO',
+        confirmLoading: isConfirming,
+        dispatchLoading: isDispatching,
+        actionsDisabled,
+      };
+    })
   );
   readonly cargando = signal(false);
   readonly error = signal<string | null>(null);
   readonly currentPage = signal<number | null>(null);
+  readonly feedback = signal<ActionFeedback | null>(null);
+  readonly activeAction = signal<{ id: number; type: TransferAction } | null>(null);
 
   ngOnInit(): void {
     this.cargar();
@@ -143,10 +184,61 @@ export class TransferenciasPageComponent implements OnInit {
     });
   }
 
+  confirmTransfer(id: number): void {
+    if (this.activeAction()) {
+      return;
+    }
+
+    this.feedback.set(null);
+    this.activeAction.set({ id, type: 'confirm' });
+
+    this.transferenciaService.confirmar(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: transferencia => {
+        this.updateTransferencia(transferencia);
+        this.feedback.set({ severity: 'success', text: UI_MESSAGES.CONFIRM_TRANSFERENCIA_SUCCESS });
+        this.activeAction.set(null);
+      },
+      error: () => {
+        this.feedback.set({ severity: 'error', text: UI_MESSAGES.CONFIRM_TRANSFERENCIA_ERROR });
+        this.activeAction.set(null);
+      },
+    });
+  }
+
+  dispatchTransfer(id: number): void {
+    if (this.activeAction()) {
+      return;
+    }
+
+    this.feedback.set(null);
+    this.activeAction.set({ id, type: 'dispatch' });
+
+    this.transferenciaService.despachar(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: transferencia => {
+        this.updateTransferencia(transferencia);
+        this.feedback.set({ severity: 'success', text: UI_MESSAGES.DISPATCH_TRANSFERENCIA_SUCCESS });
+        this.activeAction.set(null);
+      },
+      error: () => {
+        this.feedback.set({ severity: 'error', text: UI_MESSAGES.DISPATCH_TRANSFERENCIA_ERROR });
+        this.activeAction.set(null);
+      },
+    });
+  }
+
   onPageChange(event: TableLazyLoadEvent): void {
     const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
     if (this.currentPage() !== page) {
       this.cargar(page);
     }
+  }
+
+  private updateTransferencia(updatedTransferencia: TransferenciaResponse): void {
+    this.datos.update(data => ({
+      ...data,
+      contenido: data.contenido.map(item =>
+        item.id === updatedTransferencia.id ? updatedTransferencia : item
+      ),
+    }));
   }
 }
