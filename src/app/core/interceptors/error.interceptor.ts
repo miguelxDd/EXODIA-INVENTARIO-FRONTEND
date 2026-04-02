@@ -1,5 +1,6 @@
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
+import { HTTP_ERROR_MESSAGES } from '@core/constants';
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) =>
   next(req).pipe(
@@ -8,25 +9,25 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) =>
 
       switch (error.status) {
         case 0:
-          userMessage = 'No se pudo conectar con el servidor. Verifica tu conexion a internet.';
+          userMessage = HTTP_ERROR_MESSAGES.NETWORK;
           break;
         case 401:
-          userMessage = 'Tu sesion ha expirado. Por favor inicia sesion nuevamente.';
+          userMessage = HTTP_ERROR_MESSAGES.UNAUTHORIZED;
           break;
         case 403:
-          userMessage = 'No tienes permisos para realizar esta accion.';
+          userMessage = HTTP_ERROR_MESSAGES.FORBIDDEN;
           break;
         case 404:
-          userMessage = 'El recurso solicitado no fue encontrado.';
+          userMessage = HTTP_ERROR_MESSAGES.NOT_FOUND;
           break;
         case 422:
-          userMessage = 'Los datos enviados no son validos. Revisa el formulario e intenta de nuevo.';
+          userMessage = HTTP_ERROR_MESSAGES.UNPROCESSABLE_ENTITY;
           break;
         case 500:
-          userMessage = 'Ocurrio un error en el servidor. Intenta de nuevo mas tarde.';
+          userMessage = HTTP_ERROR_MESSAGES.SERVER_ERROR;
           break;
         default:
-          userMessage = `Error inesperado (${error.status}). Intenta de nuevo.`;
+          userMessage = HTTP_ERROR_MESSAGES.UNEXPECTED(error.status);
       }
 
       console.error(`[HTTP ${error.status}] ${req.method} ${req.url}`, error.message);

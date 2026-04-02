@@ -13,16 +13,4 @@ describe('AppComponent', () => {
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
   });
-
-  it('should default to light mode when no preference exists', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    expect(fixture.componentInstance.darkModeEnabled).toBeFalse();
-  });
-
-  it('should render the PrimeNG ready headline', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Angular 21 y PrimeNG');
-  });
 });

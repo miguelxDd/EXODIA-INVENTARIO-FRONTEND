@@ -1,13 +1,20 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { MessageModule } from 'primeng/message';
+import { UI_MESSAGES } from '@core/constants';
 import { UnidadService } from '@core/services';
 import { UnidadResponse } from '@core/models';
 
+type UnidadRow = UnidadResponse & {
+  abreviaturaLabel: string;
+};
+
 @Component({
   selector: 'app-unidades-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TableModule, ButtonModule, ProgressSpinnerModule, MessageModule],
   template: `
     <div class="page-header">
@@ -17,10 +24,12 @@ import { UnidadResponse } from '@core/models';
       </div>
     </div>
 
-    @if (cargando()) {
+    @if (error()) {
+      <p-message severity="error" [text]="error()!" />
+    } @else if (cargando()) {
       <div class="loading-center"><p-progressSpinner strokeWidth="3" /></div>
     } @else {
-      <p-table [value]="unidades()" [rowHover]="true" styleClass="p-datatable-sm">
+      <p-table [value]="rows()" [rowHover]="true" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
           <tr>
             <th>Codigo</th>
@@ -32,7 +41,7 @@ import { UnidadResponse } from '@core/models';
           <tr>
             <td><code>{{ u.codigo }}</code></td>
             <td>{{ u.nombre }}</td>
-            <td>{{ u.abreviatura || '-' }}</td>
+            <td>{{ u.abreviaturaLabel }}</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
@@ -51,15 +60,30 @@ import { UnidadResponse } from '@core/models';
   `]
 })
 export class UnidadesPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly unidadService = inject(UnidadService);
 
-  unidades = signal<UnidadResponse[]>([]);
-  cargando = signal(true);
+  readonly emptyValue = UI_MESSAGES.EMPTY_VALUE;
+  readonly unidades = signal<UnidadResponse[]>([]);
+  readonly rows = computed<UnidadRow[]>(() =>
+    this.unidades().map(item => ({
+      ...item,
+      abreviaturaLabel: item.abreviatura || this.emptyValue,
+    }))
+  );
+  readonly cargando = signal(true);
+  readonly error = signal<string | null>(null);
 
   ngOnInit(): void {
-    this.unidadService.listar().subscribe({
-      next: data => { this.unidades.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+    this.unidadService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.unidades.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_UNIDADES);
+        this.cargando.set(false);
+      },
     });
   }
 }

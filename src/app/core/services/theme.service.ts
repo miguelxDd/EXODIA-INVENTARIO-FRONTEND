@@ -1,5 +1,6 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { APP_CONSTANTS } from '@core/constants';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -7,7 +8,7 @@ type ThemeMode = 'light' | 'dark';
 export class ThemeService {
   private readonly document = inject(DOCUMENT);
   private readonly platformId = inject(PLATFORM_ID);
-  private readonly storageKey = 'exodia-theme';
+  private readonly storageKey = APP_CONSTANTS.THEME_KEY;
 
   readonly mode = signal<ThemeMode>('light');
   readonly isDark = computed(() => this.mode() === 'dark');

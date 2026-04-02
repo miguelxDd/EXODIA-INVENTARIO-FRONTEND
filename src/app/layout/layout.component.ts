@@ -1,12 +1,14 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { FormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ThemeService } from '@core/services';
 
 @Component({
   selector: 'app-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ToggleSwitchModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ReactiveFormsModule, ToggleSwitchModule],
   template: `
     <div class="app-layout">
       <nav class="sidebar">
@@ -72,8 +74,12 @@ import { ThemeService } from '@core/services';
 
         <div class="sidebar-footer">
           <label class="theme-toggle">
-            <span>{{ darkMode ? 'Oscuro' : 'Claro' }}</span>
-            <p-toggleswitch [(ngModel)]="darkMode" (ngModelChange)="onThemeChange($event)"></p-toggleswitch>
+            <span>{{ themeLabel() }}</span>
+            <p-toggleswitch
+              inputId="theme-mode"
+              [formControl]="themeControl"
+              ariaLabel="Cambiar entre tema claro y oscuro"
+            ></p-toggleswitch>
           </label>
         </div>
       </nav>
@@ -212,11 +218,20 @@ import { ThemeService } from '@core/services';
   `]
 })
 export class LayoutComponent {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly theme = inject(ThemeService);
 
-  darkMode = this.theme.isDark();
+  readonly isDark = this.theme.isDark;
+  readonly themeLabel = computed(() => this.isDark() ? 'Oscuro' : 'Claro');
+  readonly themeControl = new FormControl(this.theme.isDark(), { nonNullable: true });
 
-  onThemeChange(dark: boolean): void {
-    this.theme.setMode(dark ? 'dark' : 'light');
+  constructor() {
+    effect(() => {
+      this.themeControl.setValue(this.theme.isDark(), { emitEvent: false });
+    });
+
+    this.themeControl.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(dark => this.theme.setMode(dark ? 'dark' : 'light'));
   }
 }

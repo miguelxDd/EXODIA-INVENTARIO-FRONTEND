@@ -1,15 +1,23 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { MessageModule } from 'primeng/message';
+import { UI_MESSAGES } from '@core/constants';
 import { AjusteService } from '@core/services';
 import { AjusteResponse, PaginaResponse } from '@core/models';
 
+type AjusteRow = AjusteResponse & {
+  lineCount: number;
+  motivoLabel: string;
+};
+
 @Component({
   selector: 'app-ajustes-page',
-  imports: [DatePipe, TableModule, ButtonModule, TagModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, TableModule, ButtonModule, TagModule, MessageModule],
   template: `
     <div class="page-header">
       <div>
@@ -19,8 +27,12 @@ import { AjusteResponse, PaginaResponse } from '@core/models';
       <p-button label="Nuevo Ajuste" icon="pi pi-plus" />
     </div>
 
-      <p-table
-        [value]="datos().contenido"
+    @if (error()) {
+      <p-message severity="error" [text]="error()!" />
+    }
+
+    <p-table
+        [value]="rows()"
         [loading]="cargando()"
         [paginator]="true"
         [rows]="20"
@@ -46,9 +58,9 @@ import { AjusteResponse, PaginaResponse } from '@core/models';
             <td><code>{{ a.numeroAjuste }}</code></td>
             <td>{{ a.tipoAjusteNombre }}</td>
             <td>{{ a.bodegaId }}</td>
-            <td>{{ a.motivo || '-' }}</td>
+            <td>{{ a.motivoLabel }}</td>
             <td><p-tag [value]="a.estado" severity="info" /></td>
-            <td>{{ a.lineas?.length || 0 }}</td>
+            <td>{{ a.lineCount }}</td>
             <td>{{ a.creadoEn | date:'short' }}</td>
           </tr>
         </ng-template>
@@ -65,23 +77,49 @@ import { AjusteResponse, PaginaResponse } from '@core/models';
     code { font-size: 0.85em; background: var(--p-surface-100); padding: 0.15em 0.4em; border-radius: 4px; }
   `]
 })
-export class AjustesPageComponent {
+export class AjustesPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly ajusteService = inject(AjusteService);
 
-  datos = signal<PaginaResponse<AjusteResponse>>({
+  readonly emptyValue = UI_MESSAGES.EMPTY_VALUE;
+  readonly datos = signal<PaginaResponse<AjusteResponse>>({
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
-  cargando = signal(false);
+  readonly rows = computed<AjusteRow[]>(() =>
+    this.datos().contenido.map(item => ({
+      ...item,
+      lineCount: item.lineas?.length ?? 0,
+      motivoLabel: item.motivo || this.emptyValue,
+    }))
+  );
+  readonly cargando = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly currentPage = signal<number | null>(null);
+
+  ngOnInit(): void {
+    this.cargar();
+  }
 
   cargar(pagina = 0): void {
     this.cargando.set(true);
-    this.ajusteService.listar(pagina).subscribe({
-      next: data => { this.datos.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+    this.error.set(null);
+    this.currentPage.set(pagina);
+    this.ajusteService.listar(pagina).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.datos.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_AJUSTES);
+        this.cargando.set(false);
+      },
     });
   }
 
   onPageChange(event: TableLazyLoadEvent): void {
-    this.cargar(Math.floor((event.first ?? 0) / (event.rows ?? 20)));
+    const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
+    if (this.currentPage() !== page) {
+      this.cargar(page);
+    }
   }
 }

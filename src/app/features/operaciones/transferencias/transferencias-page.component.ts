@@ -1,15 +1,28 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { MessageModule } from 'primeng/message';
+import { TooltipModule } from 'primeng/tooltip';
+import { UI_MESSAGES } from '@core/constants';
 import { TransferenciaService } from '@core/services';
 import { TransferenciaResponse, PaginaResponse } from '@core/models';
 
+type TagSeverity = 'success' | 'info' | 'warn' | 'danger' | 'secondary';
+
+type TransferenciaRow = TransferenciaResponse & {
+  estadoSeverity: TagSeverity;
+  lineCount: number;
+  canConfirm: boolean;
+  canDispatch: boolean;
+};
+
 @Component({
   selector: 'app-transferencias-page',
-  imports: [DatePipe, TableModule, ButtonModule, TagModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, TableModule, ButtonModule, TagModule, MessageModule, TooltipModule],
   template: `
     <div class="page-header">
       <div>
@@ -19,8 +32,12 @@ import { TransferenciaResponse, PaginaResponse } from '@core/models';
       <p-button label="Nueva Transferencia" icon="pi pi-plus" />
     </div>
 
-      <p-table
-        [value]="datos().contenido"
+    @if (error()) {
+      <p-message severity="error" [text]="error()!" />
+    }
+
+    <p-table
+        [value]="rows()"
         [loading]="cargando()"
         [paginator]="true"
         [rows]="20"
@@ -50,14 +67,14 @@ import { TransferenciaResponse, PaginaResponse } from '@core/models';
             <td>{{ t.tipoTransferencia }}</td>
             <td>{{ t.bodegaOrigenCodigo }}</td>
             <td>{{ t.bodegaDestinoCodigo }}</td>
-            <td><p-tag [value]="t.estadoCodigo" [severity]="estadoSeverity(t.estadoCodigo)" /></td>
-            <td>{{ t.lineas?.length || 0 }}</td>
+            <td><p-tag [value]="t.estadoCodigo" [severity]="t.estadoSeverity" /></td>
+            <td>{{ t.lineCount }}</td>
             <td>{{ t.creadoEn | date:'short' }}</td>
             <td>
-              @if (t.estadoCodigo === 'BORRADOR') {
+              @if (t.canConfirm) {
                 <p-button icon="pi pi-check" [text]="true" [rounded]="true" severity="success" pTooltip="Confirmar" />
               }
-              @if (t.estadoCodigo === 'CONFIRMADO') {
+              @if (t.canDispatch) {
                 <p-button icon="pi pi-send" [text]="true" [rounded]="true" severity="info" pTooltip="Despachar" />
               }
             </td>
@@ -76,32 +93,60 @@ import { TransferenciaResponse, PaginaResponse } from '@core/models';
     code { font-size: 0.85em; background: var(--p-surface-100); padding: 0.15em 0.4em; border-radius: 4px; }
   `]
 })
-export class TransferenciasPageComponent {
+export class TransferenciasPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly transferenciaService = inject(TransferenciaService);
+  private readonly estadoSeverityMap: Record<string, TagSeverity> = {
+    BORRADOR: 'secondary',
+    CONFIRMADO: 'info',
+    DESPACHADO: 'info',
+    EN_TRANSITO: 'warn',
+    RECIBIDO_PARCIAL: 'warn',
+    RECIBIDO_COMPLETO: 'success',
+    CANCELADO: 'danger',
+    CIERRE_FORZADO: 'danger',
+  };
 
-  datos = signal<PaginaResponse<TransferenciaResponse>>({
+  readonly datos = signal<PaginaResponse<TransferenciaResponse>>({
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
-  cargando = signal(false);
+  readonly rows = computed<TransferenciaRow[]>(() =>
+    this.datos().contenido.map(item => ({
+      ...item,
+      estadoSeverity: this.estadoSeverityMap[item.estadoCodigo] ?? 'secondary',
+      lineCount: item.lineas?.length ?? 0,
+      canConfirm: item.estadoCodigo === 'BORRADOR',
+      canDispatch: item.estadoCodigo === 'CONFIRMADO',
+    }))
+  );
+  readonly cargando = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly currentPage = signal<number | null>(null);
+
+  ngOnInit(): void {
+    this.cargar();
+  }
 
   cargar(pagina = 0): void {
     this.cargando.set(true);
-    this.transferenciaService.listar(pagina).subscribe({
-      next: data => { this.datos.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+    this.error.set(null);
+    this.currentPage.set(pagina);
+    this.transferenciaService.listar(pagina).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.datos.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_TRANSFERENCIAS);
+        this.cargando.set(false);
+      },
     });
   }
 
   onPageChange(event: TableLazyLoadEvent): void {
-    this.cargar(Math.floor((event.first ?? 0) / (event.rows ?? 20)));
-  }
-
-  estadoSeverity(estado: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
-    const map: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
-      BORRADOR: 'secondary', CONFIRMADO: 'info', DESPACHADO: 'info',
-      EN_TRANSITO: 'warn', RECIBIDO_PARCIAL: 'warn',
-      RECIBIDO_COMPLETO: 'success', CANCELADO: 'danger', CIERRE_FORZADO: 'danger',
-    };
-    return map[estado] ?? 'secondary';
+    const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
+    if (this.currentPage() !== page) {
+      this.cargar(page);
+    }
   }
 }

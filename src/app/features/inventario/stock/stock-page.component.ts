@@ -1,17 +1,29 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { MessageModule } from 'primeng/message';
+import { UI_MESSAGES } from '@core/constants';
 import { StockService, BodegaService } from '@core/services';
 import { ContenedorStockResponse, BodegaResponse, PaginaResponse } from '@core/models';
 
+type TagSeverity = 'success' | 'info' | 'warn' | 'danger' | 'secondary';
+
+type StockRow = ContenedorStockResponse & {
+  estadoSeverity: TagSeverity;
+  numeroLoteLabel: string;
+  fechaVencimientoLabel: string;
+  cantidadReservadaLabel: number;
+  cantidadDisponibleLabel: number;
+};
+
 @Component({
   selector: 'app-stock-page',
-  imports: [FormsModule, TableModule, TagModule, InputTextModule, SelectModule, MessageModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ReactiveFormsModule, TableModule, TagModule, InputTextModule, SelectModule, MessageModule],
   template: `
     <div class="page-header">
       <h1>Stock de Inventario</h1>
@@ -21,17 +33,19 @@ import { ContenedorStockResponse, BodegaResponse, PaginaResponse } from '@core/m
     <div class="filters">
       <p-select
         [options]="bodegas()"
-        [(ngModel)]="bodegaFiltro"
+        [formControl]="bodegaControl"
         optionLabel="nombre"
         optionValue="id"
         placeholder="Filtrar por bodega"
         [showClear]="true"
+        ariaLabel="Filtrar por bodega"
         (onChange)="cargar()"
       />
       <input
         pInputText
         placeholder="Buscar por codigo de barras..."
-        [(ngModel)]="codigoBarrasFiltro"
+        [formControl]="codigoBarrasControl"
+        aria-label="Buscar por codigo de barras"
         (keyup.enter)="cargar()"
       />
     </div>
@@ -41,7 +55,7 @@ import { ContenedorStockResponse, BodegaResponse, PaginaResponse } from '@core/m
     }
 
     <p-table
-      [value]="datos().contenido"
+      [value]="rows()"
       [loading]="cargando()"
       [paginator]="true"
       [rows]="20"
@@ -73,12 +87,12 @@ import { ContenedorStockResponse, BodegaResponse, PaginaResponse } from '@core/m
             <td>{{ item.productoId }}</td>
             <td>{{ item.bodegaId }}</td>
             <td>{{ item.ubicacionId }}</td>
-            <td>{{ item.numeroLote || '-' }}</td>
-            <td>{{ item.fechaVencimiento || '-' }}</td>
-            <td><p-tag [value]="item.estadoCodigo" [severity]="estadoSeverity(item.estadoCodigo)" /></td>
+            <td>{{ item.numeroLoteLabel }}</td>
+            <td>{{ item.fechaVencimientoLabel }}</td>
+            <td><p-tag [value]="item.estadoCodigo" [severity]="item.estadoSeverity" /></td>
             <td style="text-align:right;font-weight:600">{{ item.stockCantidad }}</td>
-            <td style="text-align:right">{{ item.cantidadReservada || 0 }}</td>
-            <td style="text-align:right">{{ item.cantidadDisponible || 0 }}</td>
+            <td style="text-align:right">{{ item.cantidadReservadaLabel }}</td>
+            <td style="text-align:right">{{ item.cantidadDisponibleLabel }}</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
@@ -96,47 +110,74 @@ import { ContenedorStockResponse, BodegaResponse, PaginaResponse } from '@core/m
   `]
 })
 export class StockPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly stockService = inject(StockService);
   private readonly bodegaService = inject(BodegaService);
+  private readonly estadoSeverityMap: Record<string, TagSeverity> = {
+    DISPONIBLE: 'success',
+    RESERVADO: 'info',
+    EN_TRANSITO: 'warn',
+    CUARENTENA: 'danger',
+    BLOQUEADO: 'danger',
+    AGOTADO: 'secondary',
+  };
 
-  bodegas = signal<BodegaResponse[]>([]);
-  datos = signal<PaginaResponse<ContenedorStockResponse>>({
+  readonly emptyValue = UI_MESSAGES.EMPTY_VALUE;
+  readonly bodegas = signal<BodegaResponse[]>([]);
+  readonly datos = signal<PaginaResponse<ContenedorStockResponse>>({
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
-  cargando = signal(false);
-  error = signal<string | null>(null);
+  readonly rows = computed<StockRow[]>(() =>
+    this.datos().contenido.map(item => ({
+      ...item,
+      estadoSeverity: this.estadoSeverityMap[item.estadoCodigo] ?? 'secondary',
+      numeroLoteLabel: item.numeroLote || this.emptyValue,
+      fechaVencimientoLabel: item.fechaVencimiento || this.emptyValue,
+      cantidadReservadaLabel: item.cantidadReservada ?? 0,
+      cantidadDisponibleLabel: item.cantidadDisponible ?? 0,
+    }))
+  );
+  readonly cargando = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly currentPage = signal<number | null>(null);
 
-  bodegaFiltro: number | undefined;
-  codigoBarrasFiltro = '';
+  readonly bodegaControl = new FormControl<number | null>(null);
+  readonly codigoBarrasControl = new FormControl('', { nonNullable: true });
 
   ngOnInit(): void {
-    this.bodegaService.listar().subscribe(b => this.bodegas.set(b));
+    this.bodegaService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: bodegas => this.bodegas.set(bodegas),
+      error: () => this.error.set(UI_MESSAGES.LOAD_BODEGAS),
+    });
+
+    this.cargar();
   }
 
   cargar(pagina = 0): void {
     this.cargando.set(true);
     this.error.set(null);
+    this.currentPage.set(pagina);
     this.stockService.stockConsolidado({
-      bodegaId: this.bodegaFiltro,
-      codigoBarras: this.codigoBarrasFiltro || undefined,
+      bodegaId: this.bodegaControl.value ?? undefined,
+      codigoBarras: this.codigoBarrasControl.value.trim() || undefined,
       pagina,
       tamanio: 20,
-    }).subscribe({
-      next: data => { this.datos.set(data); this.cargando.set(false); },
-      error: () => { this.error.set('Error al cargar stock.'); this.cargando.set(false); },
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.datos.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_STOCK);
+        this.cargando.set(false);
+      },
     });
   }
 
   onPageChange(event: TableLazyLoadEvent): void {
     const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
-    this.cargar(page);
-  }
-
-  estadoSeverity(estado: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
-    const map: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
-      DISPONIBLE: 'success', RESERVADO: 'info', EN_TRANSITO: 'warn',
-      CUARENTENA: 'danger', BLOQUEADO: 'danger', AGOTADO: 'secondary',
-    };
-    return map[estado] ?? 'secondary';
+    if (this.currentPage() !== page) {
+      this.cargar(page);
+    }
   }
 }

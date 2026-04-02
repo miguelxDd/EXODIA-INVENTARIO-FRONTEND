@@ -1,15 +1,27 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { MessageModule } from 'primeng/message';
+import { TooltipModule } from 'primeng/tooltip';
+import { UI_MESSAGES } from '@core/constants';
 import { PickingService } from '@core/services';
 import { OrdenPickingResponse, PaginaResponse } from '@core/models';
 
+type PickingSeverity = 'success' | 'danger' | 'info';
+
+type PickingRow = OrdenPickingResponse & {
+  estadoSeverity: PickingSeverity;
+  lineCount: number;
+  canExecute: boolean;
+};
+
 @Component({
   selector: 'app-picking-page',
-  imports: [DatePipe, TableModule, ButtonModule, TagModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, TableModule, ButtonModule, TagModule, MessageModule, TooltipModule],
   template: `
     <div class="page-header">
       <div>
@@ -19,8 +31,12 @@ import { OrdenPickingResponse, PaginaResponse } from '@core/models';
       <p-button label="Nueva Orden" icon="pi pi-plus" />
     </div>
 
-      <p-table
-        [value]="datos().contenido"
+    @if (error()) {
+      <p-message severity="error" [text]="error()!" />
+    }
+
+    <p-table
+        [value]="rows()"
         [loading]="cargando()"
         [paginator]="true"
         [rows]="20"
@@ -46,11 +62,11 @@ import { OrdenPickingResponse, PaginaResponse } from '@core/models';
             <td><code>{{ p.numeroOrden }}</code></td>
             <td>{{ p.tipoPicking }}</td>
             <td>{{ p.bodegaId }}</td>
-            <td><p-tag [value]="p.estado" [severity]="p.estado === 'COMPLETADO' ? 'success' : p.estado === 'CANCELADO' ? 'danger' : 'info'" /></td>
-            <td>{{ p.lineas?.length || 0 }}</td>
+            <td><p-tag [value]="p.estado" [severity]="p.estadoSeverity" /></td>
+            <td>{{ p.lineCount }}</td>
             <td>{{ p.creadoEn | date:'short' }}</td>
             <td>
-              @if (p.estado === 'PENDIENTE') {
+              @if (p.canExecute) {
                 <p-button icon="pi pi-play" [text]="true" [rounded]="true" severity="success" pTooltip="Ejecutar" />
               }
             </td>
@@ -69,23 +85,49 @@ import { OrdenPickingResponse, PaginaResponse } from '@core/models';
     code { font-size: 0.85em; background: var(--p-surface-100); padding: 0.15em 0.4em; border-radius: 4px; }
   `]
 })
-export class PickingPageComponent {
+export class PickingPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly pickingService = inject(PickingService);
 
-  datos = signal<PaginaResponse<OrdenPickingResponse>>({
+  readonly datos = signal<PaginaResponse<OrdenPickingResponse>>({
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
-  cargando = signal(false);
+  readonly rows = computed<PickingRow[]>(() =>
+    this.datos().contenido.map(item => ({
+      ...item,
+      estadoSeverity: item.estado === 'COMPLETADO' ? 'success' : item.estado === 'CANCELADO' ? 'danger' : 'info',
+      lineCount: item.lineas?.length ?? 0,
+      canExecute: item.estado === 'PENDIENTE',
+    }))
+  );
+  readonly cargando = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly currentPage = signal<number | null>(null);
+
+  ngOnInit(): void {
+    this.cargar();
+  }
 
   cargar(pagina = 0): void {
     this.cargando.set(true);
-    this.pickingService.listar(pagina).subscribe({
-      next: data => { this.datos.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false),
+    this.error.set(null);
+    this.currentPage.set(pagina);
+    this.pickingService.listar(pagina).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.datos.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_PICKING);
+        this.cargando.set(false);
+      },
     });
   }
 
   onPageChange(event: TableLazyLoadEvent): void {
-    this.cargar(Math.floor((event.first ?? 0) / (event.rows ?? 20)));
+    const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
+    if (this.currentPage() !== page) {
+      this.cargar(page);
+    }
   }
 }

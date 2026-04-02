@@ -1,18 +1,29 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { InputTextModule } from 'primeng/inputtext';
-import { DatePickerModule } from 'primeng/datepicker';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { MessageModule } from 'primeng/message';
+import { UI_MESSAGES } from '@core/constants';
 import { KardexService } from '@core/services';
 import { OperacionResponse, PaginaResponse } from '@core/models';
 
+type KardexTagSeverity = 'success' | 'danger' | 'info';
+
+type KardexRow = OperacionResponse & {
+  cantidadSeverity: KardexTagSeverity;
+  cantidadLabel: string;
+  precioUnitarioLabel: string | number;
+  numeroLoteLabel: string;
+  referenciaLabel: string;
+};
+
 @Component({
   selector: 'app-kardex-page',
-  imports: [DatePipe, FormsModule, TableModule, TagModule, InputTextModule, DatePickerModule, MessageModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, ReactiveFormsModule, TableModule, TagModule, InputTextModule, MessageModule],
   template: `
     <div class="page-header">
       <h1>Kardex</h1>
@@ -20,7 +31,13 @@ import { OperacionResponse, PaginaResponse } from '@core/models';
     </div>
 
     <div class="filters">
-      <input pInputText placeholder="Codigo de barras..." [(ngModel)]="codigoBarras" (keyup.enter)="cargar()" />
+      <input
+        pInputText
+        placeholder="Codigo de barras..."
+        [formControl]="codigoBarrasControl"
+        aria-label="Buscar por codigo de barras"
+        (keyup.enter)="cargar()"
+      />
     </div>
 
     @if (error()) {
@@ -28,7 +45,7 @@ import { OperacionResponse, PaginaResponse } from '@core/models';
     }
 
     <p-table
-      [value]="datos().contenido"
+      [value]="rows()"
       [loading]="cargando()"
       [paginator]="true"
       [rows]="20"
@@ -56,16 +73,16 @@ import { OperacionResponse, PaginaResponse } from '@core/models';
         <ng-template pTemplate="body" let-op>
           <tr>
             <td>{{ op.fechaOperacion | date:'short' }}</td>
-            <td><p-tag [value]="op.tipoOperacionCodigo" [severity]="tipoSeverity(op.cantidad)" /></td>
+            <td><p-tag [value]="op.tipoOperacionCodigo" [severity]="op.cantidadSeverity" /></td>
             <td><code>{{ op.codigoBarras }}</code></td>
             <td>{{ op.productoId }}</td>
             <td>{{ op.bodegaId }}</td>
             <td style="text-align:right;font-weight:600" [class.positive]="op.cantidad > 0" [class.negative]="op.cantidad < 0">
-              {{ op.cantidad > 0 ? '+' : '' }}{{ op.cantidad }}
+              {{ op.cantidadLabel }}
             </td>
-            <td style="text-align:right">{{ op.precioUnitario || '-' }}</td>
-            <td>{{ op.numeroLote || '-' }}</td>
-            <td>{{ op.tipoReferencia ? op.tipoReferencia + ' #' + op.referenciaId : '-' }}</td>
+            <td style="text-align:right">{{ op.precioUnitarioLabel }}</td>
+            <td>{{ op.numeroLoteLabel }}</td>
+            <td>{{ op.referenciaLabel }}</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
@@ -84,35 +101,57 @@ import { OperacionResponse, PaginaResponse } from '@core/models';
     .negative { color: var(--p-red-500); }
   `]
 })
-export class KardexPageComponent {
+export class KardexPageComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly kardexService = inject(KardexService);
 
-  datos = signal<PaginaResponse<OperacionResponse>>({
+  readonly emptyValue = UI_MESSAGES.EMPTY_VALUE;
+  readonly datos = signal<PaginaResponse<OperacionResponse>>({
     contenido: [], pagina: 0, tamanio: 20, totalElementos: 0, totalPaginas: 0, primera: true, ultima: true
   });
-  cargando = signal(false);
-  error = signal<string | null>(null);
-  codigoBarras = '';
+  readonly rows = computed<KardexRow[]>(() =>
+    this.datos().contenido.map(item => ({
+      ...item,
+      cantidadSeverity: item.cantidad > 0 ? 'success' : item.cantidad < 0 ? 'danger' : 'info',
+      cantidadLabel: `${item.cantidad > 0 ? '+' : ''}${item.cantidad}`,
+      precioUnitarioLabel: item.precioUnitario ?? this.emptyValue,
+      numeroLoteLabel: item.numeroLote || this.emptyValue,
+      referenciaLabel: item.tipoReferencia ? `${item.tipoReferencia} #${item.referenciaId}` : this.emptyValue,
+    }))
+  );
+  readonly cargando = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly currentPage = signal<number | null>(null);
+  readonly codigoBarrasControl = new FormControl('', { nonNullable: true });
+
+  ngOnInit(): void {
+    this.cargar();
+  }
 
   cargar(pagina = 0): void {
     this.cargando.set(true);
     this.error.set(null);
+    this.currentPage.set(pagina);
     this.kardexService.consultar({
-      codigoBarras: this.codigoBarras || undefined,
+      codigoBarras: this.codigoBarrasControl.value.trim() || undefined,
       pagina,
       tamanio: 20,
-    }).subscribe({
-      next: data => { this.datos.set(data); this.cargando.set(false); },
-      error: () => { this.error.set('Error al cargar kardex.'); this.cargando.set(false); },
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {
+        this.datos.set(data);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.error.set(UI_MESSAGES.LOAD_KARDEX);
+        this.cargando.set(false);
+      },
     });
   }
 
   onPageChange(event: TableLazyLoadEvent): void {
     const page = Math.floor((event.first ?? 0) / (event.rows ?? 20));
-    this.cargar(page);
-  }
-
-  tipoSeverity(cantidad: number): 'success' | 'danger' | 'info' {
-    return cantidad > 0 ? 'success' : cantidad < 0 ? 'danger' : 'info';
+    if (this.currentPage() !== page) {
+      this.cargar(page);
+    }
   }
 }
