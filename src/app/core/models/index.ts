@@ -1,3 +1,4 @@
+export { LoteResponse, ActualizarLoteRequest } from './lote.model';
 export { ApiResponse, PaginaResponse } from './api-response.model';
 export { BodegaResponse, CrearBodegaRequest, ActualizarBodegaRequest } from './bodega.model';
 export { UbicacionResponse, CrearUbicacionRequest, ActualizarUbicacionRequest } from './ubicacion.model';

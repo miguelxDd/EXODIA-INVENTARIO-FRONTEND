@@ -8,6 +8,20 @@ export interface BodegaResponse {
   esProductoTerminado?: boolean;
   esConsignacion?: boolean;
   ubicacionStandbyId?: number;
+  latitud?: number;
+  longitud?: number;
+  mapProvider?: string;
+  mapPlaceId?: string;
+  capacidadAreaM2?: number;
+  capacidadVolumenM3?: number;
+  capacidadPesoKg?: number;
+  muellesCarga?: number;
+  telefono?: string;
+  email?: string;
+  contactoResponsable?: string;
+  horarioOperacion?: string;
+  regimenTemperatura?: string;
+  tipoOperacion?: string;
 }
 
 export interface CrearBodegaRequest {
@@ -18,6 +32,20 @@ export interface CrearBodegaRequest {
   pais?: string;
   esProductoTerminado?: boolean;
   esConsignacion?: boolean;
+  latitud?: number;
+  longitud?: number;
+  mapProvider?: string;
+  mapPlaceId?: string;
+  capacidadAreaM2?: number;
+  capacidadVolumenM3?: number;
+  capacidadPesoKg?: number;
+  muellesCarga?: number;
+  telefono?: string;
+  email?: string;
+  contactoResponsable?: string;
+  horarioOperacion?: string;
+  regimenTemperatura?: string;
+  tipoOperacion?: string;
 }
 
 export interface ActualizarBodegaRequest {
@@ -27,4 +55,18 @@ export interface ActualizarBodegaRequest {
   pais?: string;
   esProductoTerminado?: boolean;
   esConsignacion?: boolean;
+  latitud?: number;
+  longitud?: number;
+  mapProvider?: string;
+  mapPlaceId?: string;
+  capacidadAreaM2?: number;
+  capacidadVolumenM3?: number;
+  capacidadPesoKg?: number;
+  muellesCarga?: number;
+  telefono?: string;
+  email?: string;
+  contactoResponsable?: string;
+  horarioOperacion?: string;
+  regimenTemperatura?: string;
+  tipoOperacion?: string;
 }

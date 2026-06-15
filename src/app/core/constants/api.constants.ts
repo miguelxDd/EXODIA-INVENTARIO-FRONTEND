@@ -7,6 +7,7 @@ export const API = {
   BODEGAS: '/api/v1/bodegas',
   UBICACIONES: '/api/v1/ubicaciones',
   UNIDADES: '/api/v1/unidades',
+  LOTES: '/api/v1/lotes',
   CONVERSIONES_UNIDAD: '/api/v1/conversiones-unidad',
 
   STOCK: '/api/v1/inventario/stock',

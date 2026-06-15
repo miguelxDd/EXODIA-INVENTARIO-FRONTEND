@@ -13,5 +13,9 @@ export default [
     path: 'unidades',
     loadComponent: () => import('./unidades/unidades-page.component').then(m => m.UnidadesPageComponent),
   },
+  {
+    path: 'lotes',
+    loadComponent: () => import('./lotes/lotes-page.component').then(m => m.LotesPageComponent),
+  },
   { path: '', redirectTo: 'bodegas', pathMatch: 'full' as const },
 ] satisfies Routes;

@@ -130,6 +130,15 @@ export const APP_NAVIGATION_SECTIONS: readonly AppNavigationSection[] = [
         featureKey: 'catalogs.units',
         keywords: ['medida', 'unidad', 'conversion', 'empaque'],
       },
+      {
+        id: 'catalogs-lotes',
+        label: 'Lotes',
+        description: 'Gestión de lotes y control de vencimiento.',
+        path: '/catalogos/lotes',
+        icon: 'pi pi-barcode',
+        featureKey: 'catalogs.lots',
+        keywords: ['lote', 'vencimiento', 'caducidad', 'produccion', 'proveedor'],
+      },
     ],
   },
 ] as const;

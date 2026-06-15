@@ -1,4 +1,6 @@
+export { LoteService } from './lote.service';
 export { ThemeService } from './theme.service';
+export { CompanyContextService } from './company-context.service';
 export { BaseApiService } from './base-api.service';
 export { BodegaService } from './bodega.service';
 export { UbicacionService } from './ubicacion.service';

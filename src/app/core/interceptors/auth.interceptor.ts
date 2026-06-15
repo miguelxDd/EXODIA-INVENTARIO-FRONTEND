@@ -1,20 +1,17 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { APP_CONSTANTS } from '@core/constants';
-import { environment } from '@env/environment';
+import { CompanyContextService } from '@core/services';
+import { inject } from '@angular/core';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  const companyContext = inject(CompanyContextService);
   const isBrowser = typeof window !== 'undefined';
 
   const token = isBrowser
     ? window.localStorage.getItem(APP_CONSTANTS.TOKEN_KEY)
     : null;
 
-  const storedEmpresaId = isBrowser
-    ? window.localStorage.getItem(APP_CONSTANTS.EMPRESA_ID_KEY)
-    : null;
-
-  const empresaId = storedEmpresaId
-    ?? (environment.defaultEmpresaId ? String(environment.defaultEmpresaId) : null);
+  const empresaId = companyContext.currentCompanyId();
 
   let headers = req.headers;
 
@@ -23,7 +20,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   }
 
   if (empresaId) {
-    headers = headers.set('X-Empresa-Id', empresaId);
+    headers = headers.set('X-Empresa-Id', String(empresaId));
   }
 
   return next(req.clone({ headers }));

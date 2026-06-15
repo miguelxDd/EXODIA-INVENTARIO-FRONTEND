@@ -149,6 +149,60 @@ html.app-dark .shell-navbar.p-toolbar {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
+.dev-company-bar {
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+html.app-dark .dev-company-bar {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.dev-company-bar__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0.75rem 1.25rem;
+}
+
+.dev-company-bar__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.dev-company-bar__title {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.dev-company-bar__description,
+.dev-company-bar__status {
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+}
+
+.dev-company-bar__form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dev-company-bar__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dev-company-bar__form input {
+  width: 7rem;
+}
+
 .navbar-start {
   display: flex;
   align-items: center;
@@ -981,6 +1035,10 @@ html.app-dark .drawer-theme-toggle:hover {
     padding: 0 1rem;
   }
 
+  .dev-company-bar__inner {
+    padding: 0.75rem 1rem;
+  }
+
   .shell-breadcrumb {
     padding: 0.5rem 1rem;
   }
@@ -998,6 +1056,15 @@ html.app-dark .drawer-theme-toggle:hover {
 @media (max-width: 768px) {
   .shell-navbar.p-toolbar {
     padding: 0 0.75rem;
+  }
+
+  .dev-company-bar__inner {
+    grid-template-columns: 1fr;
+    padding: 0.75rem;
+  }
+
+  .dev-company-bar__form {
+    justify-content: flex-start;
   }
 
   .navbar-search-trigger {
@@ -1040,6 +1107,19 @@ html.app-dark .drawer-theme-toggle:hover {
 @media (max-width: 576px) {
   .shell-navbar.p-toolbar {
     padding: 0 0.5rem;
+  }
+
+  .dev-company-bar__inner {
+    padding: 0.7rem 0.5rem;
+  }
+
+  .dev-company-bar__form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dev-company-bar__form input {
+    width: 100%;
   }
 
   .navbar-brand-text {

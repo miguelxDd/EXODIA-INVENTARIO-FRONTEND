@@ -23,11 +23,13 @@ import {
   APP_CONSTANTS,
   APP_NAVIGATION_ITEMS,
   APP_NAVIGATION_SECTIONS,
+  UI_MESSAGES,
   SHELL_UI,
   type AppNavigationItem,
   type AppNavigationSection,
 } from '@core/constants';
-import { ThemeService } from '@core/services';
+import { CompanyContextService, ThemeService } from '@core/services';
+import { environment } from '@env/environment';
 
 // ── View models ──
 
@@ -249,6 +251,37 @@ const SEARCH_TYPE_SEVERITY: Record<SearchableRecord['type'], 'info' | 'success' 
           </div>
         </ng-template>
       </p-toolbar>
+
+      @if (showDevCompanyBar) {
+        <section class="dev-company-bar" aria-label="Contexto de empresa">
+          <div class="dev-company-bar__inner">
+            <div class="dev-company-bar__copy">
+              <strong class="dev-company-bar__title">Contexto de empresa</strong>
+              <small class="dev-company-bar__description">{{ uiMessages.DEV_COMPANY_CONTEXT_HELP }}</small>
+            </div>
+
+            <div class="dev-company-bar__form">
+              <label class="dev-company-bar__label" for="dev-company-id">Empresa ID</label>
+              <input
+                id="dev-company-id"
+                pInputText
+                type="number"
+                inputmode="numeric"
+                min="1"
+                [formControl]="companyIdControl"
+                placeholder="Ej. 2"
+                aria-describedby="dev-company-status"
+              />
+              <p-button label="Aplicar" size="small" (onClick)="applyCompanyContext()" />
+              <p-button label="Default" size="small" severity="secondary" [text]="true" (onClick)="resetCompanyContext()" />
+            </div>
+
+            <small id="dev-company-status" class="dev-company-bar__status">
+              {{ companyContextFeedback() || currentCompanyIdLabel() }}
+            </small>
+          </div>
+        </section>
+      }
 
       <!-- ═══ SEARCH DIALOG ═══ -->
       <p-dialog
@@ -573,14 +606,17 @@ export class LayoutComponent {
   private readonly router = inject(Router);
   private readonly documentTitle = inject(Title);
   readonly theme = inject(ThemeService);
+  readonly companyContext = inject(CompanyContextService);
 
   private readonly globalSearchInput = viewChild<ElementRef<HTMLInputElement>>('globalSearchInput');
 
   readonly appName = APP_CONSTANTS.APP_NAME;
   readonly navigationDrawerId = 'app-navigation-drawer';
   readonly shellUi = SHELL_UI;
+  readonly uiMessages = UI_MESSAGES;
   readonly totalModuleCount = APP_NAVIGATION_ITEMS.length;
   readonly currentYear = new Date().getFullYear();
+  readonly showDevCompanyBar = !environment.production;
 
   // ── Drawer state ──
   readonly drawerVisible = signal(false);
@@ -594,6 +630,14 @@ export class LayoutComponent {
   readonly isDark = this.theme.isDark;
   readonly themeLabel = computed(() => (this.isDark() ? 'Modo oscuro' : 'Modo claro'));
   readonly themeControl = new FormControl(this.theme.isDark(), { nonNullable: true });
+
+  // ── Company context (development helper) ──
+  readonly companyIdControl = new FormControl(this.companyContext.currentCompanyId()?.toString() ?? '', { nonNullable: true });
+  readonly companyContextFeedback = signal<string | null>(null);
+  readonly currentCompanyIdLabel = computed(() => {
+    const companyId = this.companyContext.currentCompanyId();
+    return companyId ? `Empresa activa: ${companyId}` : 'Empresa activa no definida';
+  });
 
   // ── Notifications ──
   readonly notifications = signal<MockNotification[]>([...MOCK_NOTIFICATIONS]);
@@ -709,6 +753,11 @@ export class LayoutComponent {
       this.documentTitle.setTitle(`EXODIA | ${this.currentPageLabel()}`);
     });
 
+    effect(() => {
+      const companyId = this.companyContext.currentCompanyId();
+      this.companyIdControl.setValue(companyId?.toString() ?? '', { emitEvent: false });
+    });
+
     this.themeControl.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(dark => this.theme.setMode(dark ? 'dark' : 'light'));
@@ -747,6 +796,24 @@ export class LayoutComponent {
 
   markAllRead(): void {
     this.notifications.update(list => list.map(n => ({ ...n, read: true })));
+  }
+
+  applyCompanyContext(): void {
+    const rawValue = this.companyIdControl.value.trim();
+    const parsedValue = Number(rawValue);
+
+    if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+      this.companyContextFeedback.set(this.uiMessages.DEV_COMPANY_CONTEXT_INVALID);
+      return;
+    }
+
+    this.companyContext.setCompanyId(parsedValue);
+    this.companyContextFeedback.set(this.uiMessages.DEV_COMPANY_CONTEXT_SAVED(parsedValue));
+  }
+
+  resetCompanyContext(): void {
+    this.companyContext.resetToDefault();
+    this.companyContextFeedback.set(this.uiMessages.DEV_COMPANY_CONTEXT_RESET);
   }
 
   getTypeLabel(type: SearchableRecord['type']): string {
